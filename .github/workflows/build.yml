@@ -181,6 +181,16 @@ jobs:
           ${APKS}
           "
 
-          curl -X POST -H "Content-Type: application/json" \
-            -d "$(jq -n --arg content "$MSG" '{content: $content}')" \
-            "$DISCORD_WEBHOOK_URL"
+          # Function to send messages in chunks
+          send_discord_message() {
+            local message="$1"
+            while [ ${#message} -gt 0 ]; do
+              local chunk="${message:0:2000}"  # Take the first 2000 characters
+              curl -X POST -H "Content-Type: application/json" \
+                -d "$(jq -n --arg content "$chunk" '{content: $content}')" \
+                "$DISCORD_WEBHOOK_URL"
+              message="${message:2000}"  # Remove the sent chunk from the message
+            done
+          }
+
+          send_discord_message "$MSG"
