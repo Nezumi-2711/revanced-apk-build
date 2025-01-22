@@ -181,16 +181,28 @@ jobs:
           ${APKS}
           "
 
-          # Function to send messages in chunks
+          # Function to split messages by line and send them
           send_discord_message() {
             local message="$1"
-            while [ ${#message} -gt 0 ]; do
-              local chunk="${message:0:2000}"  # Take the first 2000 characters
+            local buffer=""
+            while IFS= read -r line || [ -n "$line" ]; do
+              # Check if adding the current line exceeds 2000 characters
+              if [ ${#buffer} -ge 2000 ]; then
+                # Send the current buffer and reset it
+                curl -X POST -H "Content-Type: application/json" \
+                  -d "$(jq -n --arg content "$buffer" '{content: $content}')" \
+                  "$DISCORD_WEBHOOK_URL"
+                buffer=""
+              fi
+              buffer+="$line\n"
+            done <<< "$message"
+
+            # Send any remaining content in the buffer
+            if [ -n "$buffer" ]; then
               curl -X POST -H "Content-Type: application/json" \
-                -d "$(jq -n --arg content "$chunk" '{content: $content}')" \
+                -d "$(jq -n --arg content "$buffer" '{content: $content}')" \
                 "$DISCORD_WEBHOOK_URL"
-              message="${message:2000}"  # Remove the sent chunk from the message
-            done
+            fi
           }
 
           send_discord_message "$MSG"
