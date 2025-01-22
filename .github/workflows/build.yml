@@ -184,25 +184,25 @@ jobs:
           # Function to split messages properly by ensuring correct Markdown formatting
           send_discord_message() {
             local message="$1"
-            local buffer=""
-            while IFS= read -r line || [ -n "$line" ]; do
-              # Check if adding the current line exceeds 2000 characters
-              if [ ${#buffer} -ge 2000 ]; then
-                # Send the current buffer and reset it
-                curl -X POST -H "Content-Type: application/json" \
-                  -d "$(jq -n --arg content "$buffer" '{content: $content}')" \
-                  "$DISCORD_WEBHOOK_URL"
-                buffer=""
-              fi
-              buffer+="${line}\n"
-            done <<< "$message"
+            local chunk=""
+            local remainder="$message"
 
-            # Send any remaining content in the buffer
-            if [ -n "$buffer" ]; then
+            while [ ${#remainder} -gt 0 ]; do
+              # Try to split at the last newline within the 2000-character limit
+              chunk="${remainder:0:2000}"
+              local cutoff=$(echo "$chunk" | awk 'END {print length($0) - length($NF)}') # Find last space/newline
+              if [ "$cutoff" -lt 2000 ]; then
+                chunk="${remainder:0:$cutoff}"  # Safe chunk
+                remainder="${remainder:$cutoff}"  # Remaining text
+              else
+                remainder="${remainder:2000}"  # Fallback to default split
+              fi
+
+              # Send the chunk to Discord
               curl -X POST -H "Content-Type: application/json" \
-                -d "$(jq -n --arg content "$buffer" '{content: $content}')" \
+                -d "$(jq -n --arg content "$chunk" '{content: $content}')" \
                 "$DISCORD_WEBHOOK_URL"
-            fi
+            done
           }
 
           send_discord_message "$MSG"
