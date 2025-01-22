@@ -181,7 +181,7 @@ jobs:
           ${APKS}
           "
 
-          # Function to split messages by line and send them
+          # Function to split messages properly by ensuring correct Markdown formatting
           send_discord_message() {
             local message="$1"
             local buffer=""
@@ -194,7 +194,7 @@ jobs:
                   "$DISCORD_WEBHOOK_URL"
                 buffer=""
               fi
-              buffer+="$line\n"
+              buffer+="${line}\n"
             done <<< "$message"
 
             # Send any remaining content in the buffer
