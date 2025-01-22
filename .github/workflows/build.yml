@@ -184,19 +184,25 @@ jobs:
           # Function to split messages properly by ensuring correct Markdown formatting
           send_discord_message() {
             local message="$1"
-            local chunk=""
-            local remainder="$message"
 
-            while [ ${#remainder} -gt 0 ]; do
-              # Try to split at the last newline within the 2000-character limit
-              chunk="${remainder:0:2000}"
-              local cutoff=$(echo "$chunk" | awk 'END {print length($0) - length($NF)}') # Find last space/newline
-              if [ "$cutoff" -lt 2000 ]; then
-                chunk="${remainder:0:$cutoff}"  # Safe chunk
-                remainder="${remainder:$cutoff}"  # Remaining text
+            while [ ${#message} -gt 0 ]; do
+              # Attempt to find a safe split point within 2000 characters
+              local chunk="${message:0:2000}"
+              local cutoff=$(echo "$chunk" | awk '{print length($0) - length($NF)}') # Find last space/newline within chunk
+
+              if [ $cutoff -gt 0 ] && [ $cutoff -lt 2000 ]; then
+                # Use safe cutoff point if available
+                chunk="${message:0:$cutoff}"
+                message="${message:$cutoff}"
               else
-                remainder="${remainder:2000}"  # Fallback to default split
+                # Default to cutting at the 2000-character limit
+                chunk="${message:0:2000}"
+                message="${message:2000}"
               fi
+
+              # Remove leading/trailing whitespace in the chunk and message
+              chunk=$(echo "$chunk" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              message=$(echo "$message" | sed 's/^[[:space:]]*//')
 
               # Send the chunk to Discord
               curl -X POST -H "Content-Type: application/json" \
