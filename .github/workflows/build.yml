@@ -174,41 +174,26 @@ jobs:
           ${BODY}
 
           **Download Links:**
+          "
+          
+          MODULES_MSG="
           **Modules:**
           ${MODULES}
+          "
 
+          APKS_MSG="
           **APKs:**
           ${APKS}
           "
 
-          # Function to split messages properly by ensuring correct Markdown formatting
-          send_discord_message() {
-            local message="$1"
-
-            while [ ${#message} -gt 0 ]; do
-              # Attempt to find a safe split point within 2000 characters
-              local chunk="${message:0:2000}"
-              local cutoff=$(echo "$chunk" | awk '{print length($0) - length($NF)}') # Find last space/newline within chunk
-
-              if [ $cutoff -gt 0 ] && [ $cutoff -lt 2000 ]; then
-                # Use safe cutoff point if available
-                chunk="${message:0:$cutoff}"
-                message="${message:$cutoff}"
-              else
-                # Default to cutting at the 2000-character limit
-                chunk="${message:0:2000}"
-                message="${message:2000}"
-              fi
-
-              # Remove leading/trailing whitespace in the chunk and message
-              chunk=$(echo "$chunk" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-              message=$(echo "$message" | sed 's/^[[:space:]]*//')
-
-              # Send the chunk to Discord
-              curl -X POST -H "Content-Type: application/json" \
-                -d "$(jq -n --arg content "$chunk" '{content: $content}')" \
-                "$DISCORD_WEBHOOK_URL"
-            done
-          }
-
-          send_discord_message "$MSG"
+          curl -X POST -H "Content-Type: application/json" \
+            -d "$(jq -n --arg content "$MSG" '{content: $content}')" \
+            "$DISCORD_WEBHOOK_URL"
+          
+          curl -X POST -H "Content-Type: application/json" \
+            -d "$(jq -n --arg content "$MODULES_MSG" '{content: $content}')" \
+            "$DISCORD_WEBHOOK_URL"
+          
+          curl -X POST -H "Content-Type: application/json" \
+            -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
+            "$DISCORD_WEBHOOK_URL"
