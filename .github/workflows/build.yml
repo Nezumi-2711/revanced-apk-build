@@ -190,9 +190,9 @@ jobs:
             -d "$(jq -n --arg content "$MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_URL"
           
-          curl -X POST -H "Content-Type: application/json" \
-            -d "$(jq -n --arg content "$MODULES_MSG" '{content: $content}')" \
-            "$DISCORD_WEBHOOK_URL"
+          # curl -X POST -H "Content-Type: application/json" \
+          #   -d "$(jq -n --arg content "$MODULES_MSG" '{content: $content}')" \
+          #   "$DISCORD_WEBHOOK_URL"
           
           curl -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
