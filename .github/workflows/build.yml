@@ -198,7 +198,7 @@ jobs:
             -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_URL"
         
-        - name: Report to Noob Discord
+      - name: Report to Noob Discord
         env:
           DISCORD_WEBHOOK_NOOB_URL: ${{ secrets.DISCORD_WEBHOOK_NOOB_URL }}
         if: env.DISCORD_WEBHOOK_NOOB_URL != null
