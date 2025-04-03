@@ -197,3 +197,55 @@ jobs:
           curl -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_URL"
+        
+        - name: Report to Noob Discord
+        env:
+          DISCORD_WEBHOOK_NOOB_URL: ${{ secrets.DISCORD_WEBHOOK_NOOB_URL }}
+        if: env.DISCORD_WEBHOOK_NOOB_URL != null
+        run: |
+          cd build || { echo "build folder not found"; exit 1; }
+
+          NL=$'\n'
+          APKS=""
+          MODULES=""
+          for OUTPUT in *; do
+            DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
+            if [[ $OUTPUT = *.apk ]]; then
+              APKS+="${NL}- [${OUTPUT}](${DL_URL})"
+            elif [[ $OUTPUT = *.zip ]]; then
+              MODULES+="${NL}- [${OUTPUT}](${DL_URL})"
+            fi
+          done
+
+          MODULES=${MODULES#"$NL"}
+          APKS=${APKS#"$NL"}
+
+          BODY="$(sed 's/^\* \*\*/- \*\*/g; s/^\* `/- \*\*/g; s/`/\*/g; s/^\* /\-/g; s/\*\*/\*/g; s/###//g; s/^- /- /g; /^==/d;' ../build.md)"
+          MSG="**New build is ready!**
+
+          ${BODY}
+
+          **Download Links:**
+          "
+          
+          MODULES_MSG="
+          **Modules:**
+          ${MODULES}
+          "
+
+          APKS_MSG="
+          **APKs:**
+          ${APKS}
+          "
+
+          curl -X POST -H "Content-Type: application/json" \
+            -d "$(jq -n --arg content "$MSG" '{content: $content}')" \
+            "$DISCORD_WEBHOOK_NOOB_URL"
+          
+          # curl -X POST -H "Content-Type: application/json" \
+          #   -d "$(jq -n --arg content "$MODULES_MSG" '{content: $content}')" \
+          #   "$DISCORD_WEBHOOK_NOOB_URL"
+          
+          curl -X POST -H "Content-Type: application/json" \
+            -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
+            "$DISCORD_WEBHOOK_NOOB_URL"
