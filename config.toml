@@ -81,3 +81,6 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 included-patches = "'Custom header for YouTube' 'MaterialYou'"
 excluded-patches = "'Custom branding icon for YouTube' 'Custom branding name for YouTube' 'Disable splash animation'"
+
+[Spotify]
+uptodown-dlurl = "https://spotify.en.uptodown.com/android"
