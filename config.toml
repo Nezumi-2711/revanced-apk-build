@@ -83,4 +83,8 @@ included-patches = "'Custom header for YouTube' 'MaterialYou'"
 excluded-patches = "'Custom branding icon for YouTube' 'Custom branding name for YouTube' 'Disable splash animation'"
 
 [Spotify]
+app-name = "Spotify"
+build-mode = "apk"
+arch = "both"
+version = "auto"
 uptodown-dlurl = "https://spotify.en.uptodown.com/android"
