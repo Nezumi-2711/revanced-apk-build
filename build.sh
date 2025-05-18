@@ -170,6 +170,4 @@ log "Use [zygisk-detach](https://github.com/j-hc/zygisk-detach) to detach root R
 log "\n[revanced-magisk-module](https://github.com/j-hc/revanced-magisk-module)\n"
 log "$(cat "$TEMP_DIR"/*-rv/changelog.md)"
 
-SKIPPED=$(cat "$TEMP_DIR"/skipped 2>/dev/null || :)
-
 pr "Done"
