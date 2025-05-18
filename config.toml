@@ -7,8 +7,8 @@ parallel-jobs = 1
 # you can use rvmm-config-gen to generate a config
 
 [YouTube]
-build-mode = "apk"
-excluded-patches = "'Hide timestamp'"
+build-mode = "both"
+excluded-patches = ""
 included-patches = ""
 version = "auto"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
@@ -16,46 +16,21 @@ uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 # archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
 
 [Music]
-build-mode = "apk"
+build-mode = "both"
 arch = "both"
-version = "auto"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
 # archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.youtube.music"
 
 [GooglePhotos]
-build-mode = "apk"
+build-mode = "both"
 arch = "both"
 version = "auto"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos/"
 uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
 
-[Music-Extended]
-app-name = "Music"
-patches-source = "inotia00/revanced-patches"
-cli-source = "inotia00/revanced-cli"
-rv-brand = "ReVanced Extended"
-build-mode = "apk"
-arch = "both"
-version = "auto"
-included-patches = "'Custom header for YouTube Music' 'Spoof client'"
-excluded-patches = "'Custom branding icon for YouTube Music' 'Custom branding name for YouTube Music'"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
-uptodown-dlurl = "https://youtube-music.uptodown.com/android"
-
-[Music-Extended-Beta]
-app-name = "Music"
-patches-source = "inotia00/revanced-patches"
-patches-version = "dev"
-cli-source = "inotia00/revanced-cli"
-rv-brand = "ReVanced Extended"
-build-mode = "apk"
-arch = "both"
-version = "auto"
-included-patches = "'Custom header for YouTube Music' 'Spoof client'"
-excluded-patches = "'Custom branding icon for YouTube Music' 'Custom branding name for YouTube Music'"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
-uptodown-dlurl = "https://youtube-music.uptodown.com/android"
+[Spotify]
+uptodown-dlurl = "https://spotify.en.uptodown.com/android"
 
 [YouTube-Extended]
 app-name = "YouTube"
@@ -69,22 +44,16 @@ uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 included-patches = "'Custom header for YouTube' 'MaterialYou' 'Hide Shorts dimming'"
 excluded-patches = "'Custom branding icon for YouTube' 'Custom branding name for YouTube' 'Disable splash animation'"
 
-[YouTube-Extended-Beta]
-app-name = "YouTube"
-patches-source = "inotia00/revanced-patches"
-patches-version = "dev"
-cli-source = "inotia00/revanced-cli"
-rv-brand = "ReVanced Extended"
-build-mode = "apk"
-version = "auto"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
-uptodown-dlurl = "https://youtube.en.uptodown.com/android"
-included-patches = "'Custom header for YouTube' 'MaterialYou'"
-excluded-patches = "'Custom branding icon for YouTube' 'Custom branding name for YouTube' 'Disable splash animation'"
+[TikTok]
+enabled = false
+# archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.zhiliaoapp.musically"
+included-patches = "'SIM spoof'"
 
-[Spotify]
-app-name = "Spotify"
-build-mode = "apk"
-arch = "both"
-version = "auto"
-uptodown-dlurl = "https://spotify.en.uptodown.com/android"
+[Messenger]
+enabled = false
+apkmirror-dlurl = "https://www.apkmirror.com/apk/facebook-2/messenger/"
+arch = "arm64-v8a"
+
+[IconPackStudio]
+enabled = false
+apkmirror-dlurl = "https://www.apkmirror.com/apk/smart-launcher-team/icon-pack-studio/"
