@@ -32,17 +32,29 @@ uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
 [Spotify]
 uptodown-dlurl = "https://spotify.en.uptodown.com/android"
 
-[YouTube-Extended]
+[YouTube-Morphe]
 app-name = "YouTube"
-patches-source = "inotia00/revanced-patches"
-cli-source = "inotia00/revanced-cli"
-rv-brand = "ReVanced Extended"
+patches-source = "MorpheApp/morphe-patches"
+cli-source = "MorpheApp/morphe-cli"
+rv-brand = "Morphe"
 build-mode = "apk"
 version = "auto"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
-included-patches = "'Custom header for YouTube' 'MaterialYou' 'Hide Shorts dimming'"
-excluded-patches = "'Custom branding icon for YouTube' 'Custom branding name for YouTube' 'Disable splash animation'"
+included-patches = ""
+excluded-patches = ""
+
+[Music-Morphe]
+app-name = "Music"
+patches-source = "MorpheApp/morphe-patches"
+cli-source = "MorpheApp/morphe-cli"
+rv-brand = "Morphe"
+build-mode = "apk"
+arch = "both"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
+uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
+included-patches = ""
+excluded-patches = ""
 
 [TikTok]
 enabled = false

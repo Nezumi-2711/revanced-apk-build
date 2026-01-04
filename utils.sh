@@ -48,7 +48,20 @@ get_rv_prebuilts() {
 	local cl_dir=${patches_src%/*}
 	cl_dir=${TEMP_DIR}/${cl_dir,,}-rv
 	[ -d "$cl_dir" ] || mkdir "$cl_dir"
-	for src_ver in "$cli_src CLI $cli_ver revanced-cli" "$patches_src Patches $patches_ver patches"; do
+	
+	# Detect if using Morphe or ReVanced based on patches source
+	local is_morphe=false
+	if [[ "$patches_src" == *"MorpheApp"* ]] || [[ "$patches_src" == *"morphe"* ]]; then
+		is_morphe=true
+	fi
+	
+	# Set CLI filename prefix based on source
+	local cli_prefix="revanced-cli"
+	if [ "$is_morphe" = true ]; then
+		cli_prefix="morphe-cli"
+	fi
+	
+	for src_ver in "$cli_src CLI $cli_ver $cli_prefix" "$patches_src Patches $patches_ver patches"; do
 		set -- $src_ver
 		local src=$1 tag=$2 ver=${3-} fprefix=$4
 		local ext
@@ -56,7 +69,12 @@ get_rv_prebuilts() {
 			ext="jar"
 			local grab_cl=false
 		elif [ "$tag" = "Patches" ]; then
-			ext="rvp"
+			# Use .mpp for Morphe, .rvp for ReVanced
+			if [ "$is_morphe" = true ]; then
+				ext="mpp"
+			else
+				ext="rvp"
+			fi
 			local grab_cl=true
 		else abort unreachable; fi
 		local dir=${src%/*}
@@ -100,7 +118,8 @@ get_rv_prebuilts() {
 		fi
 		if [ "$tag" = "Patches" ]; then
 			if [ $grab_cl = true ]; then echo -e "[Changelog](https://github.com/${src}/releases/tag/${tag_name})\n" >>"${cl_dir}/changelog.md"; fi
-			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ]; then
+			# Skip integrations check patching for Morphe (not applicable)
+			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ] && [ "$is_morphe" = false ]; then
 				if ! (
 					mkdir -p "${file}-zip" || return 1
 					unzip -qo "${file}" -d "${file}-zip" || return 1
@@ -155,7 +174,12 @@ config_update() {
 			else
 				last_patches=$(gh_req "$rv_rel/tags/${ver}" -)
 			fi
-			if ! last_patches=$(jq -e -r '.assets[] | select(.name | endswith("rvp")) | .name' <<<"$last_patches"); then
+			# Detect if using Morphe or ReVanced based on patches source
+			local patches_ext="rvp"
+			if [[ "$PATCHES_SRC" == *"MorpheApp"* ]] || [[ "$PATCHES_SRC" == *"morphe"* ]]; then
+				patches_ext="mpp"
+			fi
+			if ! last_patches=$(jq -e -r ".assets[] | select(.name | endswith(\"$patches_ext\")) | .name" <<<"$last_patches"); then
 				abort oops
 			fi
 			if [ "$last_patches" ]; then
@@ -432,8 +456,19 @@ get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
 
 patch_apk() {
 	local stock_input=$1 patched_apk=$2 patcher_args=$3 rv_cli_jar=$4 rv_patches_jar=$5
-	local cmd="env -u GITHUB_REPOSITORY java -jar $rv_cli_jar patch $stock_input --purge -o $patched_apk -p $rv_patches_jar --keystore=ks.keystore \
+	local cmd
+	
+	# Detect if using Morphe CLI based on jar filename
+	if [[ "$rv_cli_jar" == *"morphe-cli"* ]]; then
+		# Morphe CLI syntax: java -jar cli.jar patch -p patches.mpp -o output.apk input.apk [options]
+		cmd="env -u GITHUB_REPOSITORY java -jar $rv_cli_jar patch -p $rv_patches_jar --purge -o $patched_apk --keystore=ks.keystore \
+--keystore-entry-password=123456789 --keystore-password=123456789 --signer=jhc --keystore-entry-alias=jhc $patcher_args $stock_input"
+	else
+		# ReVanced CLI syntax: java -jar cli.jar patch input.apk -p patches.rvp -o output.apk [options]
+		cmd="env -u GITHUB_REPOSITORY java -jar $rv_cli_jar patch $stock_input --purge -o $patched_apk -p $rv_patches_jar --keystore=ks.keystore \
 --keystore-entry-password=123456789 --keystore-password=123456789 --signer=jhc --keystore-entry-alias=jhc $patcher_args"
+	fi
+	
 	if [ "$OS" = Android ]; then cmd+=" --custom-aapt2-binary=${AAPT2}"; fi
 	pr "$cmd"
 	if eval "$cmd"; then [ -f "$patched_apk" ]; else
@@ -598,10 +633,12 @@ build_rv() {
 		module_config "$base_template" "$pkg_name" "$version" "$arch"
 
 		local rv_patches_ver="${rv_patches_jar##*-}"
+		rv_patches_ver="${rv_patches_ver%%.rvp}"
+		rv_patches_ver="${rv_patches_ver%%.mpp}"
 		module_prop \
 			"${args[module_prop_name]}" \
 			"${app_name} ${args[rv_brand]}" \
-			"${version} (patches: ${rv_patches_ver%%.rvp})" \
+			"${version} (patches: ${rv_patches_ver})" \
 			"${app_name} ${args[rv_brand]} Magisk module" \
 			"https://raw.githubusercontent.com/${GITHUB_REPOSITORY-}/update/${upj}" \
 			"$base_template"

@@ -1,6 +1,7 @@
 # Config
 
 Adding another revanced app is as easy as this:
+
 ```toml
 [Some-App]
 apkmirror-dlurl = "https://www.apkmirror.com/apk/inc/app"
@@ -10,7 +11,7 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/inc/app"
 ## More about other options:
 
 There exists an example below with all defaults shown and all the keys explicitly set.  
-**All keys are optional** (except download urls) and are assigned to their default values if not set explicitly.  
+**All keys are optional** (except download urls) and are assigned to their default values if not set explicitly.
 
 ```toml
 parallel-jobs = 1                    # amount of cores to use for parallel patching, if not set $(nproc) is used
@@ -20,6 +21,12 @@ remove-rv-integrations-checks = true # remove checks from the revanced integrati
 patches-source = "revanced/revanced-patches" # where to fetch patches bundle from. default: "revanced/revanced-patches"
 cli-source = "j-hc/revanced-cli"             # where to fetch cli from. default: "j-hc/revanced-cli"
 # options like cli-source can also set per app
+#
+# Supported sources:
+# - ReVanced:           patches-source = "revanced/revanced-patches", cli-source = "j-hc/revanced-cli"
+# - ReVanced Extended:  patches-source = "inotia00/revanced-patches", cli-source = "inotia00/revanced-cli"
+# - Morphe:             patches-source = "MorpheApp/morphe-patches", cli-source = "MorpheApp/morphe-cli"
+#
 rv-brand = "ReVanced Extended" # rebrand from 'ReVanced' to something different. default: "ReVanced"
 
 patches-version = "v2.160.0" # 'latest', 'dev', or a version number. default: "latest"
