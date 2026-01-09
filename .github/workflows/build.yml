@@ -16,8 +16,8 @@ jobs:
     steps:
       - uses: actions/setup-java@v4
         with:
-          distribution: "zulu"
-          java-version: "17"
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -175,7 +175,7 @@ jobs:
 
           **Download Links:**
           "
-          
+
           MODULES_MSG="
           **Modules:**
           ${MODULES}
@@ -189,15 +189,15 @@ jobs:
           curl -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_URL"
-          
+
           # curl -X POST -H "Content-Type: application/json" \
           #   -d "$(jq -n --arg content "$MODULES_MSG" '{content: $content}')" \
           #   "$DISCORD_WEBHOOK_URL"
-          
+
           curl -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_URL"
-        
+
       - name: Report to Noob Discord
         env:
           DISCORD_WEBHOOK_NOOB_URL: ${{ secrets.DISCORD_WEBHOOK_NOOB_URL }}
@@ -227,7 +227,7 @@ jobs:
 
           **Download Links:**
           "
-          
+
           MODULES_MSG="
           **Modules:**
           ${MODULES}
@@ -241,11 +241,109 @@ jobs:
           curl -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_NOOB_URL"
-          
+
           # curl -X POST -H "Content-Type: application/json" \
           #   -d "$(jq -n --arg content "$MODULES_MSG" '{content: $content}')" \
           #   "$DISCORD_WEBHOOK_NOOB_URL"
-          
+
           curl -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$APKS_MSG" '{content: $content}')" \
             "$DISCORD_WEBHOOK_NOOB_URL"
+
+      - name: Send Email Notification (Resend)
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_CC: ${{ secrets.MAIL_CC }}
+          MAIL_BCC: ${{ secrets.MAIL_BCC }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+        if: env.RESEND_API_KEY != null && env.MAIL_TO != null
+        run: |
+          VERSION="${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}"
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${VERSION}"
+          REPO="${{ github.repository }}"
+
+          # Set default FROM address if not provided
+          FROM_ADDRESS="${MAIL_FROM:-ReVanced Build Bot <onboarding@resend.dev>}"
+
+          # Build download links from build folder
+          cd build || { echo "build folder not found"; exit 1; }
+
+          DOWNLOAD_LINKS=""
+          for OUTPUT in *; do
+            DL_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/${VERSION}/${OUTPUT}"
+            if [[ $OUTPUT = *.apk ]]; then
+              DOWNLOAD_LINKS+="<li>📦 <a href=\"${DL_URL}\" style=\"color: #667eea;\">${OUTPUT}</a></li>"
+            elif [[ $OUTPUT = *.zip ]]; then
+              DOWNLOAD_LINKS+="<li>📁 <a href=\"${DL_URL}\" style=\"color: #667eea;\">${OUTPUT}</a></li>
+            fi
+          done
+          cd ..
+
+          # Create HTML email body
+          HTML_BODY=$(cat <<EOF
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+          </head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center;">
+              <h1 style="margin: 0;">🎉 New ReVanced Build!</h1>
+              <p style="margin: 10px 0 0 0; font-size: 18px;">Version: v${VERSION}</p>
+            </div>
+            <div style="padding: 25px; background: #f9f9f9;">
+              <div style="margin-bottom: 25px;">
+                <h2 style="color: #667eea; font-size: 18px; margin: 0 0 10px 0;">📋 Build Summary</h2>
+                <p style="margin: 0;">A new ReVanced build has been completed successfully!</p>
+              </div>
+              <div style="margin-bottom: 25px;">
+                <h2 style="color: #667eea; font-size: 18px; margin: 0 0 10px 0;">📥 Downloads</h2>
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                  ${DOWNLOAD_LINKS}
+                </ul>
+              </div>
+              <div style="margin-bottom: 25px; text-align: center;">
+                <a href="${RELEASE_URL}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold;">
+                  View Release on GitHub
+                </a>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 20px; background: #333; color: #999; font-size: 12px;">
+              <p style="margin: 0;">This is an automated message from ReVanced Build Bot</p>
+              <p style="margin: 5px 0 0 0;">Repository: ${REPO}</p>
+            </div>
+          </body>
+          </html>
+          EOF
+          )
+
+          # Build JSON payload with TO, CC and BCC recipients
+          # Resend allows up to 50 recipients per field (to, cc, bcc)
+          JSON_PAYLOAD=$(jq -n \
+            --arg from "$FROM_ADDRESS" \
+            --arg to "$MAIL_TO" \
+            --arg cc "$MAIL_CC" \
+            --arg bcc "$MAIL_BCC" \
+            --arg subject "🚀 New ReVanced Build Available - v${VERSION}" \
+            --arg html "$HTML_BODY" \
+            '{
+              from: $from,
+              to: ($to | split(",") | map(select(. != "") | gsub("^\\s+|\\s+$"; ""))),
+              subject: $subject,
+              html: $html
+            }
+            + (if $cc != "" then {cc: ($cc | split(",") | map(select(. != "") | gsub("^\\s+|\\s+$"; "")))} else {} end)
+            + (if $bcc != "" then {bcc: ($bcc | split(",") | map(select(. != "") | gsub("^\\s+|\\s+$"; "")))} else {} end)'
+          )
+
+          echo "📧 Sending email notification..."
+
+          # Send email via Resend API
+          RESPONSE=$(curl -s -X POST "https://api.resend.com/emails" \
+            -H "Authorization: Bearer ${RESEND_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD")
+
+          echo "Response: $RESPONSE"
+          echo "✅ Email sent successfully!"
