@@ -34,7 +34,9 @@ jobs:
           # Set default FROM address if not provided
           FROM_ADDRESS="${MAIL_FROM:-ReVanced Build Bot <onboarding@resend.dev>}"
 
-          VERSION="TEST-$(date +%Y%m%d-%H%M%S)"
+          # Use Vietnam timezone (UTC+7)
+          VERSION="TEST-$(TZ='Asia/Ho_Chi_Minh' date +%Y%m%d-%H%M%S)"
+          SENT_TIME=$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S (UTC+7)')
           RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases"
           REPO="${{ github.repository }}"
 
@@ -53,14 +55,14 @@ jobs:
             <div style="padding: 25px; background: #f9f9f9;">
               <div style="margin-bottom: 25px;">
                 <h2 style="color: #667eea; font-size: 18px; margin: 0 0 10px 0;">✅ Email Configuration Working!</h2>
-                <p style="margin: 0;">Nếu bạn nhận được email này, nghĩa là cấu hình Resend đã hoạt động chính xác.</p>
+                <p style="margin: 0;">If you received this email, it means your Resend configuration is working correctly!</p>
               </div>
               <div style="margin-bottom: 25px;">
                 <h2 style="color: #667eea; font-size: 18px; margin: 0 0 10px 0;">📋 Configuration Details</h2>
                 <ul style="list-style: none; padding: 0; margin: 0;">
                   <li>📧 From: ${FROM_ADDRESS}</li>
                   <li>📬 To: ${MAIL_TO}</li>
-                  <li>🕐 Sent at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')</li>
+                  <li>🕐 Sent at: ${SENT_TIME}</li>
                 </ul>
               </div>
               <div style="margin-bottom: 25px; text-align: center;">

@@ -266,21 +266,39 @@ jobs:
           # Set default FROM address if not provided
           FROM_ADDRESS="${MAIL_FROM:-ReVanced Build Bot <onboarding@resend.dev>}"
 
-          # Build download links from build folder
+          # Build download links from build folder (separate APKs and Modules)
           cd build || { echo "build folder not found"; exit 1; }
 
-          DOWNLOAD_LINKS=""
+          APK_LINKS=""
+          MODULE_LINKS=""
           for OUTPUT in *; do
             DL_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/${VERSION}/${OUTPUT}"
             if [[ $OUTPUT = *.apk ]]; then
-              DOWNLOAD_LINKS+="<li>📦 <a href=\"${DL_URL}\" style=\"color: #667eea;\">${OUTPUT}</a></li>"
+              APK_LINKS+="<li style=\"margin: 8px 0;\">📦 <a href=\"${DL_URL}\" style=\"color: #667eea; text-decoration: none;\">${OUTPUT}</a></li>"
             elif [[ $OUTPUT = *.zip ]]; then
-              DOWNLOAD_LINKS+="<li>📁 <a href=\"${DL_URL}\" style=\"color: #667eea;\">${OUTPUT}</a></li>
+              MODULE_LINKS+="<li style=\"margin: 8px 0;\">📁 <a href=\"${DL_URL}\" style=\"color: #667eea; text-decoration: none;\">${OUTPUT}</a></li>"
             fi
           done
           cd ..
 
-          # Create HTML email body
+          # Get current time in Vietnam timezone (UTC+7)
+          BUILD_TIME=$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S (UTC+7)')
+
+          # Get changelog from build.md and convert to HTML
+          if [ -f "build.md" ]; then
+            # Convert markdown to simple HTML
+            CHANGELOG_HTML=$(sed 's/^### \(.*\)/<h3 style="color: #667eea; font-size: 16px; margin: 15px 0 8px 0;">\1<\/h3>/g; 
+              s/^\* \*\*\(.*\)\*\*/<li style="margin: 5px 0;"><strong>\1<\/strong><\/li>/g;
+              s/^\* \(.*\)/<li style="margin: 5px 0;">\1<\/li>/g;
+              s/^- \(.*\)/<li style="margin: 5px 0;">\1<\/li>/g;
+              s/`\([^`]*\)`/<code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 13px;">\1<\/code>/g;
+              /^==/d;
+              /^$/d' build.md | tr '\n' ' ')
+          else
+            CHANGELOG_HTML="<p>No changelog available.</p>"
+          fi
+
+          # Create HTML email body (similar structure to Telegram)
           HTML_BODY=$(cat <<EOF
           <!DOCTYPE html>
           <html>
@@ -291,24 +309,51 @@ jobs:
             <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center;">
               <h1 style="margin: 0;">🎉 New ReVanced Build!</h1>
               <p style="margin: 10px 0 0 0; font-size: 18px;">Version: v${VERSION}</p>
+              <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">🕐 ${BUILD_TIME}</p>
             </div>
+            
             <div style="padding: 25px; background: #f9f9f9;">
-              <div style="margin-bottom: 25px;">
-                <h2 style="color: #667eea; font-size: 18px; margin: 0 0 10px 0;">📋 Build Summary</h2>
-                <p style="margin: 0;">A new ReVanced build has been completed successfully!</p>
+              <!-- Changelog Section -->
+              <div style="margin-bottom: 25px; background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
+                <h2 style="color: #667eea; font-size: 18px; margin: 0 0 15px 0;">📋 Changelog</h2>
+                <div style="font-size: 14px;">
+                  ${CHANGELOG_HTML}
+                </div>
               </div>
-              <div style="margin-bottom: 25px;">
-                <h2 style="color: #667eea; font-size: 18px; margin: 0 0 10px 0;">📥 Downloads</h2>
-                <ul style="list-style: none; padding: 0; margin: 0;">
-                  ${DOWNLOAD_LINKS}
-                </ul>
+              
+              <!-- Download Links Section -->
+              <div style="margin-bottom: 25px; background: white; padding: 20px; border-radius: 8px;">
+                <h2 style="color: #667eea; font-size: 18px; margin: 0 0 15px 0;">� Download Links</h2>
+                
+                <!-- Modules -->
+                $(if [ -n "$MODULE_LINKS" ]; then echo "
+                <div style=\"margin-bottom: 15px;\">
+                  <h3 style=\"color: #555; font-size: 15px; margin: 0 0 10px 0;\">� Modules:</h3>
+                  <ul style=\"list-style: none; padding: 0; margin: 0;\">
+                    ${MODULE_LINKS}
+                  </ul>
+                </div>
+                "; fi)
+                
+                <!-- APKs -->
+                $(if [ -n "$APK_LINKS" ]; then echo "
+                <div>
+                  <h3 style=\"color: #555; font-size: 15px; margin: 0 0 10px 0;\">📱 APKs:</h3>
+                  <ul style=\"list-style: none; padding: 0; margin: 0;\">
+                    ${APK_LINKS}
+                  </ul>
+                </div>
+                "; fi)
               </div>
-              <div style="margin-bottom: 25px; text-align: center;">
+              
+              <!-- GitHub Button -->
+              <div style="text-align: center;">
                 <a href="${RELEASE_URL}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold;">
                   View Release on GitHub
                 </a>
               </div>
             </div>
+            
             <div style="text-align: center; padding: 20px; background: #333; color: #999; font-size: 12px;">
               <p style="margin: 0;">This is an automated message from ReVanced Build Bot</p>
               <p style="margin: 5px 0 0 0;">Repository: ${REPO}</p>
