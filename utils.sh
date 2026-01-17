@@ -99,7 +99,22 @@ get_rv_prebuilts() {
 			resp=$(gh_req "$rv_rel" -) || return 1
 			if [ "$ver" = "dev" ]; then resp=$(jq -r '.[0]' <<<"$resp"); fi
 			tag_name=$(jq -r '.tag_name' <<<"$resp")
-			asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\"))" <<<"$resp") || return 1
+			# Filter assets by extension and handle multiple matches
+			if [ "$ver" = "dev" ]; then
+				# For dev version, prefer the one with "dev" in the name
+				asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\") and contains(\"dev\"))" <<<"$resp" | head -1)
+				# If no dev asset found, take any matching asset
+				if [ -z "$asset" ]; then
+					asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\"))" <<<"$resp" | head -1) || return 1
+				fi
+			else
+				# For non-dev versions, exclude dev builds and take the first match
+				asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\") and (contains(\"dev\") | not))" <<<"$resp" | head -1)
+				# If no non-dev asset found, take any matching asset
+				if [ -z "$asset" ]; then
+					asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\"))" <<<"$resp" | head -1) || return 1
+				fi
+			fi
 			url=$(jq -r .url <<<"$asset")
 			name=$(jq -r .name <<<"$asset")
 			file="${dir}/${name}"
