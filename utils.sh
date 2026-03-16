@@ -215,7 +215,10 @@ _req() {
 	local ip="$1" op="$2"
 	shift 2
 	if [ "$op" = - ]; then
-		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip"; then
+		local _req_out
+		if _req_out=$(curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" 2>&1); then
+			echo "$_req_out"
+		else
 			epr "Request failed: $ip"
 			return 1
 		fi
@@ -227,7 +230,7 @@ _req() {
 			while [ -f "$dlp" ]; do sleep 1; done
 			return
 		fi
-		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" -o "$dlp"; then
+		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" -o "$dlp" 2>/dev/null; then
 			epr "Request failed: $ip"
 			return 1
 		fi
@@ -541,7 +544,13 @@ build_rv() {
 	local tried_dl=()
 	for dl_p in archive apkmirror uptodown; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
-		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
+		local _fetch_ok=true
+		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" 2>/dev/null; then
+			_fetch_ok=false
+		elif ! pkg_name=$(get_"${dl_p}"_pkg_name 2>/dev/null) || [ -z "$pkg_name" ]; then
+			_fetch_ok=false
+		fi
+		if [ "$_fetch_ok" = false ]; then
 			args[${dl_p}_dlurl]=""
 			epr "ERROR: Could not find ${table} in ${dl_p}"
 			continue
@@ -596,7 +605,7 @@ build_rv() {
 		for dl_p in archive apkmirror uptodown; do
 			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 			pr "Downloading '${table}' from ${dl_p}"
-			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
+			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || true; fi
 			if ! dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
 				epr "ERROR: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
 				continue
