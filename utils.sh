@@ -215,10 +215,7 @@ _req() {
 	local ip="$1" op="$2"
 	shift 2
 	if [ "$op" = - ]; then
-		local _req_out
-		if _req_out=$(curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" 2>&1); then
-			echo "$_req_out"
-		else
+		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" 2>/dev/null; then
 			epr "Request failed: $ip"
 			return 1
 		fi
