@@ -215,7 +215,7 @@ _req() {
 	local ip="$1" op="$2"
 	shift 2
 	if [ "$op" = - ]; then
-		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" 2>/dev/null; then
+		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip"; then
 			epr "Request failed: $ip"
 			return 1
 		fi
@@ -227,7 +227,7 @@ _req() {
 			while [ -f "$dlp" ]; do sleep 1; done
 			return
 		fi
-		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" -o "$dlp" 2>/dev/null; then
+		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" -o "$dlp"; then
 			epr "Request failed: $ip"
 			return 1
 		fi
@@ -523,6 +523,7 @@ check_sig() {
 
 build_rv() {
 	eval "declare -A args=${1#*=}"
+	echo "[DEBUG] build_rv entered for ${args[table]}" >&2
 	local version="" pkg_name=""
 	local mode_arg=${args[build_mode]} version_mode=${args[version]}
 	local app_name=${args[app_name]}
@@ -541,13 +542,7 @@ build_rv() {
 	local tried_dl=()
 	for dl_p in archive apkmirror uptodown; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
-		local _fetch_ok=true
-		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" 2>/dev/null; then
-			_fetch_ok=false
-		elif ! pkg_name=$(get_"${dl_p}"_pkg_name 2>/dev/null) || [ -z "$pkg_name" ]; then
-			_fetch_ok=false
-		fi
-		if [ "$_fetch_ok" = false ]; then
+		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name) || [ -z "$pkg_name" ]; then
 			args[${dl_p}_dlurl]=""
 			epr "ERROR: Could not find ${table} in ${dl_p}"
 			continue
