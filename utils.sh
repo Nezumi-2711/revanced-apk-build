@@ -481,7 +481,7 @@ dl_archive() {
 }
 get_archive_resp() {
 	local r
-	r=$(req "$1" -)
+	r=$(req "$1" -) || return 1
 	if [ -z "$r" ]; then return 1; else __ARCHIVE_RESP__=$(sed -n 's;^<a href="\(.*\)"[^"]*;\1;p' <<<"$r"); fi
 	__ARCHIVE_PKG_NAME__=$(awk -F/ '{print $NF}' <<<"$1")
 }
@@ -523,7 +523,6 @@ check_sig() {
 
 build_rv() {
 	eval "declare -A args=${1#*=}"
-	echo "[DEBUG] build_rv entered for ${args[table]}" >&2
 	local version="" pkg_name=""
 	local mode_arg=${args[build_mode]} version_mode=${args[version]}
 	local app_name=${args[app_name]}

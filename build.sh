@@ -67,7 +67,6 @@ for table_name in $(toml_get_table_names); do
 	vtf "$enabled" "enabled"
 	if [ "$enabled" = false ]; then continue; fi
 	if ((idx >= PARALLEL_JOBS)); then
-		echo "[DEBUG] wait -n at top of loop for $table_name" >&2
 		wait -n
 		idx=$((idx - 1))
 	fi
@@ -81,7 +80,6 @@ for table_name in $(toml_get_table_names); do
 	if ! RVP="$(get_rv_prebuilts "$cli_src" "$cli_ver" "$patches_src" "$patches_ver")"; then
 		abort "could not download rv prebuilts"
 	fi
-	echo "[DEBUG] get_rv_prebuilts done for $table_name, RVP='$RVP'" >&2
 	read -r rv_cli_jar rv_patches_jar <<<"$RVP"
 	app_args[cli]=$rv_cli_jar
 	app_args[ptjar]=$rv_patches_jar
@@ -95,7 +93,6 @@ for table_name in $(toml_get_table_names); do
 		fi
 	fi
 	if [ "${app_args[riplib]}" = "true" ] && [ "$(toml_get "$t" riplib)" = "false" ]; then app_args[riplib]=false; fi
-	echo "[DEBUG] riplib check done for $table_name, riplib=${app_args[riplib]}" >&2
 	app_args[rv_brand]=$(toml_get "$t" rv-brand) || app_args[rv_brand]=$DEF_RV_BRAND
 
 	app_args[excluded_patches]=$(toml_get "$t" excluded-patches) || app_args[excluded_patches]=""
@@ -144,13 +141,11 @@ for table_name in $(toml_get_table_names); do
 		module_prop_name_b=${app_args[module_prop_name]}
 		app_args[module_prop_name]="${module_prop_name_b}-arm64"
 		idx=$((idx + 1))
-		echo "[DEBUG] Launching build_rv for $table_name (arm64-v8a)" >&2
 		build_rv "$(declare -p app_args)" &
 		app_args[table]="$table_name (arm-v7a)"
 		app_args[arch]="arm-v7a"
 		app_args[module_prop_name]="${module_prop_name_b}-arm"
 		if ((idx >= PARALLEL_JOBS)); then
-			echo "[DEBUG] wait -n for parallel job limit" >&2
 			wait -n
 			idx=$((idx - 1))
 		fi
@@ -163,11 +158,9 @@ for table_name in $(toml_get_table_names); do
 			app_args[module_prop_name]="${app_args[module_prop_name]}-arm"
 		fi
 		idx=$((idx + 1))
-		echo "[DEBUG] Launching build_rv for $table_name" >&2
 		build_rv "$(declare -p app_args)" &
 	fi
 done
-echo "[DEBUG] All build_rv launched, waiting..." >&2
 wait
 rm -rf temp/tmp.*
 if [ -z "$(ls -A1 "${BUILD_DIR}")" ]; then abort "All builds failed."; fi
