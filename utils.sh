@@ -522,6 +522,8 @@ check_sig() {
 }
 
 build_rv() {
+	trap 'echo "[ERR_TRAP] build_rv failed at line $LINENO, cmd: $BASH_COMMAND" >&2' ERR
+	set -x
 	eval "declare -A args=${1#*=}"
 	local version="" pkg_name=""
 	local mode_arg=${args[build_mode]} version_mode=${args[version]}
