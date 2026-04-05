@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
-MODULE_TEMPLATE_DIR="revanced-magisk"
+MODULE_TEMPLATE_DIR="module"
 CWD=$(pwd)
 TEMP_DIR="temp"
 BIN_DIR="bin"
 BUILD_DIR="build"
+DL_SRCS=("direct" "archive" "apkmirror" "uptodown")
 
 if [ "${GITHUB_TOKEN-}" ]; then GH_HEADER="Authorization: token ${GITHUB_TOKEN}"; else GH_HEADER=; fi
 NEXT_VER_CODE=${NEXT_VER_CODE:-$(date +'%Y%m%d')}
@@ -22,12 +23,15 @@ toml_get_table_names() { jq -r -e 'to_entries[] | select(.value | type == "objec
 toml_get_table_main() { jq -r -e 'to_entries | map(select(.value | type != "object")) | from_entries' <<<"$__TOML__"; }
 toml_get_table() { jq -r -e ".\"${1}\"" <<<"$__TOML__"; }
 toml_get() {
-	local op
+	local op quote_placeholder=$'\001'
 	op=$(jq -r ".\"${2}\" | values" <<<"$1")
 	if [ "$op" ]; then
 		op="${op#"${op%%[![:space:]]*}"}"
 		op="${op%"${op##*[![:space:]]}"}"
+		op=${op//\\\'/$quote_placeholder}
+		op=${op//"''"/$quote_placeholder}
 		op=${op//"'"/'"'}
+		op=${op//$quote_placeholder/$'\''}
 		echo "$op"
 	else return 1; fi
 }
@@ -35,56 +39,47 @@ toml_get() {
 pr() { echo -e "\033[0;32m[+] ${1}\033[0m"; }
 epr() {
 	echo >&2 -e "\033[0;31m[-] ${1}\033[0m"
-	if [ "${GITHUB_REPOSITORY-}" ]; then echo -e "::error::utils.sh [-] ${1}\n"; fi
+	if [ "${GITHUB_REPOSITORY-}" ]; then echo >&2 -e "::error::utils.sh [-] ${1}\n"; fi
+}
+wpr() {
+	echo >&2 -e "\033[0;33m[!] ${1}\033[0m"
+	if [ "${GITHUB_REPOSITORY-}" ]; then echo >&2 -e "::warning::utils.sh [!] ${1}\n"; fi
 }
 abort() {
 	epr "ABORT: ${1-}"
-	exit 1
+	rm -rf ./${TEMP_DIR}/*tmp.* ./${TEMP_DIR}/*/*tmp.* ./${TEMP_DIR}/*-temporary-files
+	kill -n 9 0
 }
+java() { env -i java --enable-native-access=ALL-UNNAMED "$@"; }
 
-get_rv_prebuilts() {
+get_prebuilts() {
 	local cli_src=$1 cli_ver=$2 patches_src=$3 patches_ver=$4
 	pr "Getting prebuilts (${patches_src%/*})" >&2
 	local cl_dir=${patches_src%/*}
 	cl_dir=${TEMP_DIR}/${cl_dir,,}-rv
 	[ -d "$cl_dir" ] || mkdir "$cl_dir"
-	
-	# Detect if using Morphe or ReVanced based on patches source
-	local is_morphe=false
-	if [[ "$patches_src" == *"MorpheApp"* ]] || [[ "$patches_src" == *"morphe"* ]]; then
-		is_morphe=true
-	fi
-	
-	# Set CLI filename prefix based on source
-	local cli_prefix="revanced-cli"
-	if [ "$is_morphe" = true ]; then
-		cli_prefix="morphe-cli"
-	fi
-	
-	for src_ver in "$cli_src CLI $cli_ver $cli_prefix" "$patches_src Patches $patches_ver patches"; do
+
+	for src_ver in "$cli_src CLI $cli_ver cli" "$patches_src Patches $patches_ver patches"; do
 		set -- $src_ver
 		local src=$1 tag=$2 ver=${3-} fprefix=$4
-		local ext
+
 		if [ "$tag" = "CLI" ]; then
-			ext="jar"
 			local grab_cl=false
 		elif [ "$tag" = "Patches" ]; then
-			# Use .mpp for Morphe, .rvp for ReVanced
-			if [ "$is_morphe" = true ]; then
-				ext="mpp"
-			else
-				ext="rvp"
-			fi
 			local grab_cl=true
 		else abort unreachable; fi
+
 		local dir=${src%/*}
 		dir=${TEMP_DIR}/${dir,,}-rv
 		[ -d "$dir" ] || mkdir "$dir"
 
 		local rv_rel="https://api.github.com/repos/${src}/releases" name_ver
 		if [ "$ver" = "dev" ]; then
-			name_ver="*-dev*"
-		elif [ "$ver" = "latest" ]; then
+			local resp
+			resp=$(gh_req "$rv_rel" -) || return 1
+			ver=$(jq -e -r '.[] | .tag_name' <<<"$resp" | get_highest_ver) || return 1
+		fi
+		if [ "$ver" = "latest" ]; then
 			rv_rel+="/latest"
 			name_ver="*"
 		else
@@ -92,22 +87,27 @@ get_rv_prebuilts() {
 			name_ver="$ver"
 		fi
 
-		local url file tag_name name
-		file=$(find "$dir" -name "${fprefix}-${name_ver#v}.${ext}" -type f 2>/dev/null)
+		local url file tag_name matches
+		file=$(find "$dir" -name "*${fprefix}-${name_ver#v}.*" -type f 2>/dev/null)
 		if [ -z "$file" ]; then
 			local resp asset name
 			resp=$(gh_req "$rv_rel" -) || return 1
-			if [ "$ver" = "dev" ]; then resp=$(jq -r '.[0]' <<<"$resp"); fi
-			tag_name=$(jq -r '.tag_name' <<<"$resp")
-			# Filter assets by extension and handle multiple matches
-			# Use jq array syntax to get first match as a complete JSON object
-			if [ "$ver" = "dev" ]; then
-				# For dev version, prefer the one with "dev" in the name
-				asset=$(jq -e -r "[.assets[] | select(.name | endswith(\"$ext\") and contains(\"dev\"))][0] // [.assets[] | select(.name | endswith(\"$ext\"))][0]" <<<"$resp") || return 1
-			else
-				# For non-dev versions, exclude dev builds and take the first match
-				asset=$(jq -e -r "[.assets[] | select(.name | endswith(\"$ext\") and (contains(\"dev\") | not))][0] // [.assets[] | select(.name | endswith(\"$ext\"))][0]" <<<"$resp") || return 1
+			tag_name=$(jq -r '.tag_name' <<<"$resp") || return 1
+			matches=$(jq -e '.assets | map(select(.name | (endswith("asc") or endswith("json")) | not))' <<<"$resp") || return 1
+			if [ "$(jq 'length' <<<"$matches")" -gt 1 ]; then
+				local matches_new
+				matches_new=$(jq -e -r 'map(select(.name | contains("-dev") | not))' <<<"$matches")
+				if [ "$(jq 'length' <<<"$matches_new")" -eq 1 ]; then
+					matches=$matches_new
+				fi
 			fi
+			if [ "$(jq 'length' <<<"$matches")" -eq 0 ]; then
+				epr "No asset was found"
+				return 1
+			elif [ "$(jq 'length' <<<"$matches")" -ne 1 ]; then
+				wpr "More than 1 asset was found for this release. Falling back to the first one found..."
+			fi
+			asset=$(jq -r ".[0]" <<<"$matches")
 			url=$(jq -r .url <<<"$asset")
 			name=$(jq -r .name <<<"$asset")
 			file="${dir}/${name}"
@@ -124,15 +124,17 @@ get_rv_prebuilts() {
 			tag_name=$(cut -d'-' -f3- <<<"$name")
 			tag_name=v${tag_name%.*}
 		fi
+
 		if [ "$tag" = "Patches" ]; then
-			if [ $grab_cl = true ]; then echo -e "[Changelog](https://github.com/${src}/releases/tag/${tag_name})\n" >>"${cl_dir}/changelog.md"; fi
-			# Skip integrations check patching for Morphe (not applicable)
-			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ] && [ "$is_morphe" = false ]; then
+			if [ "$grab_cl" = true ]; then echo -e "[Changelog](https://github.com/${src}/releases/tag/${tag_name})\n" >>"${cl_dir}/changelog.md"; fi
+			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ]; then
+				local extensions_ext
+				extensions_ext=$(unzip -l "${file}" "extensions/shared.*" | grep -o "shared\..*") extensions_ext="${extensions_ext#*.}"
 				if ! (
 					mkdir -p "${file}-zip" || return 1
 					unzip -qo "${file}" -d "${file}-zip" || return 1
-					java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main "${file}-zip/extensions/shared.rve" "${file}-zip/extensions/shared-patched.rve" || return 1
-					mv -f "${file}-zip/extensions/shared-patched.rve" "${file}-zip/extensions/shared.rve" || return 1
+					java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main "${file}-zip/extensions/shared.${extensions_ext}" "${file}-zip/extensions/shared-patched.${extensions_ext}" || return 1
+					mv -f "${file}-zip/extensions/shared-patched.${extensions_ext}" "${file}-zip/extensions/shared.${extensions_ext}" || return 1
 					rm "${file}" || return 1
 					cd "${file}-zip" || abort
 					zip -0rq "${CWD}/${file}" . || return 1
@@ -167,7 +169,7 @@ config_update() {
 		if [ -z "$table_name" ]; then continue; fi
 		t=$(toml_get_table "$table_name")
 		enabled=$(toml_get "$t" enabled) || enabled=true
-		if [ "$enabled" = false ]; then continue; fi
+		if [ "$enabled" = "false" ]; then continue; fi
 		PATCHES_SRC=$(toml_get "$t" patches-source) || PATCHES_SRC=$DEF_PATCHES_SRC
 		PATCHES_VER=$(toml_get "$t" patches-version) || PATCHES_VER=$DEF_PATCHES_VER
 		if [[ -v sources["$PATCHES_SRC/$PATCHES_VER"] ]]; then
@@ -176,22 +178,17 @@ config_update() {
 			sources["$PATCHES_SRC/$PATCHES_VER"]=0
 			local rv_rel="https://api.github.com/repos/${PATCHES_SRC}/releases"
 			if [ "$PATCHES_VER" = "dev" ]; then
-				last_patches=$(gh_req "$rv_rel" - | jq -e -r '.[0]')
+				last_patches=$(gh_req "$rv_rel" - | jq -e -r '.[0]') || continue
 			elif [ "$PATCHES_VER" = "latest" ]; then
-				last_patches=$(gh_req "$rv_rel/latest" -)
+				last_patches=$(gh_req "$rv_rel/latest" -) || continue
 			else
-				last_patches=$(gh_req "$rv_rel/tags/${ver}" -)
+				last_patches=$(gh_req "$rv_rel/tags/${ver}" -) || continue
 			fi
-			# Detect if using Morphe or ReVanced based on patches source
-			local patches_ext="rvp"
-			if [[ "$PATCHES_SRC" == *"MorpheApp"* ]] || [[ "$PATCHES_SRC" == *"morphe"* ]]; then
-				patches_ext="mpp"
-			fi
-			if ! last_patches=$(jq -e -r ".assets[] | select(.name | endswith(\"$patches_ext\")) | .name" <<<"$last_patches"); then
-				abort oops
+			if ! last_patches=$(jq -e -r '.assets[] | select(.name | (endswith("asc") or endswith("json")) | not) | .name' <<<"$last_patches"); then
+				abort "config_update error: '$last_patches'"
 			fi
 			if [ "$last_patches" ]; then
-				if ! OP=$(grep "^Patches: ${PATCHES_SRC%%/*}/" build.md | grep "$last_patches"); then
+				if ! OP=$(grep "^Patches: ${PATCHES_SRC%%/*}/" build.md | grep -m1 "$last_patches"); then
 					sources["$PATCHES_SRC/$PATCHES_VER"]=1
 					prcfg=true
 					upped+=("$table_name")
@@ -214,32 +211,24 @@ config_update() {
 _req() {
 	local ip="$1" op="$2"
 	shift 2
-	if [ "$op" = - ]; then
-		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip"; then
-			epr "Request failed: $ip"
-			return 1
-		fi
-	else
+	local dlp="$op"
+	if [ "$op" != - ]; then
 		if [ -f "$op" ]; then return; fi
-		local dlp
 		dlp="$(dirname "$op")/tmp.$(basename "$op")"
 		if [ -f "$dlp" ]; then
 			while [ -f "$dlp" ]; do sleep 1; done
 			return
 		fi
-		if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 3 --retry-delay 2 --fail -s -S "$@" "$ip" -o "$dlp"; then
-			epr "Request failed: $ip"
-			return 1
-		fi
+	fi
+	if ! curl -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" --connect-timeout 10 --retry 1 --fail -s -S "$@" "$ip" -o "$dlp"; then
+		epr "Request failed: $ip"
+		return 1
+	fi
+	if [ "$dlp" != - ]; then
 		mv -f "$dlp" "$op"
 	fi
 }
-req() {
-	_req "$1" "$2" \
-		-H "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0" \
-		-H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
-		-H "Accept-Language: en-US,en;q=0.5"
-}
+req() { _req "$1" "$2" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:108.0) Gecko/20100101 Firefox/108.0"; }
 gh_req() { _req "$1" "$2" -H "$GH_HEADER"; }
 gh_dl() {
 	if [ ! -f "$1" ]; then
@@ -257,6 +246,7 @@ get_highest_ver() {
 }
 semver_validate() {
 	local a="${1%-*}"
+	local a="${a#v}"
 	local ac="${a//[.0-9]/}"
 	[ ${#ac} = 0 ]
 }
@@ -280,11 +270,13 @@ get_patch_last_supported_ver() {
 			return
 		fi
 	fi
-	op=$(patches_list_versions "$rv_cli_jar" "$rv_patches_jar" "$pkg_name") || return 1
-	op=$(tail -n +3 <<<"$op" | awk '{$1=$1}1')
+	op=$(patches_list_versions "$cli_jar" "$patches_jar" "$pkg_name") || return 1
+	op=$(sed -n '/(.* patch.*/,$p' <<<"$op" | awk '{$1=$1}1')
 	if [ "$op" = "Any" ]; then return; fi
 	pcount=$(head -1 <<<"$op") pcount=${pcount#*(} pcount=${pcount% *}
-	if [ -z "$pcount" ]; then abort "No patches found for '$pkg_name' in patches '$rv_patches_jar'"; fi
+	if [ -z "$pcount" ]; then
+		abort "No patches found for '$pkg_name' in patches '$patches_jar'"
+	fi
 	grep -F "($pcount patch" <<<"$op" | sed 's/ (.* patch.*//' | get_highest_ver || return 1
 }
 
@@ -321,27 +313,18 @@ merge_splits() {
 	local bundle=$1 output=$2
 	pr "Merging splits"
 	gh_dl "$TEMP_DIR/apkeditor.jar" "https://github.com/REAndroid/APKEditor/releases/download/V1.4.7/APKEditor-1.4.7.jar" >/dev/null || return 1
-	if ! OP=$(java -jar "$TEMP_DIR/apkeditor.jar" merge -i "${bundle}" -o "${bundle}.mzip" -clean-meta -f 2>&1); then
-		epr "Apkeditor ERROR: $OP"
+	if ! OP=$(java -jar "$TEMP_DIR/apkeditor.jar" merge -i "$bundle" -o "${output}-unsigned" -clean-meta -f 2>&1); then
+		epr "APKEditor error: $OP"
 		return 1
 	fi
-	# this is required because of apksig
-	mkdir "${bundle}-zip"
-	unzip -qo "${bundle}.mzip" -d "${bundle}-zip"
-	(
-		cd "${bundle}-zip" || abort
-		zip -0rq "${CWD}/${bundle}.zip" .
-	)
-	# if building module, sign the merged apk properly
-	if isoneof "module" "${build_mode_arr[@]}"; then
-		patch_apk "${bundle}.zip" "${output}" "--exclusive" "${args[cli]}" "${args[ptjar]}"
-		local ret=$?
-	else
-		cp "${bundle}.zip" "${output}"
-		local ret=$?
+	# sign the merged stock apk
+	if ! OP=$(java -jar "$APKSIGNER" sign --ks ks-p12.keystore --ks-pass pass:123456789 --key-pass pass:123456789 --ks-key-alias jhc \
+		--out "${output}" "${output}-unsigned"); then
+		epr "apksigner error: $OP"
+		return 1
 	fi
-	rm -r "${bundle}-zip" "${bundle}.zip" "${bundle}.mzip" || :
-	return $ret
+	rm "${output}.idsig" "${output}-unsigned" 2>/dev/null || :
+	return 0
 }
 
 # -------------------- apkmirror --------------------
@@ -354,7 +337,7 @@ apkmirror_search() {
 	for ((n = 1; n < 40; n++)); do
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child($n)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ -z "$node" ]; then break; fi
-		emptyCheck=$($HTMLQ -t -w "div.table-cell:nth-child(1) > a:nth-child(1)" --attribute class <<<"$node" | xargs)
+		emptyCheck=$($HTMLQ -t -w "div.table-cell:nth-child(1) > a:nth-child(1)" <<<"$node" | xargs)
 		if [ "$emptyCheck" ]; then
 			dlurl=$($HTMLQ --base https://www.apkmirror.com --attribute href "div:nth-child(1) > a:nth-child(1)" <<<"$node")
 		else break; fi
@@ -501,30 +484,34 @@ dl_archive() {
 }
 get_archive_resp() {
 	local r
-	r=$(req "$1" -) || return 1
+	r=$(req "$1" -)
 	if [ -z "$r" ]; then return 1; else __ARCHIVE_RESP__=$(sed -n 's;^<a href="\(.*\)"[^"]*;\1;p' <<<"$r"); fi
 	__ARCHIVE_PKG_NAME__=$(awk -F/ '{print $NF}' <<<"$1")
 }
 get_archive_vers() { sed 's/^[^-]*-//;s/-\(all\|arm64-v8a\|arm-v7a\)\.apk//g' <<<"$__ARCHIVE_RESP__"; }
 get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
+
+# -------------------- direct --------------------
+dl_direct() {
+	local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5
+	req "$url" "${output}" || return 1
+}
+get_direct_vers() { cut -d- -f2 <<<"$__DIRECT_APKNAME__"; }
+get_direct_pkg_name() { cut -d- -f1 <<<"$__DIRECT_APKNAME__"; }
+get_direct_resp() { __DIRECT_APKNAME__=$(awk -F/ '{print $NF}' <<<"$1"); }
 # --------------------------------------------------
 
 patch_apk() {
-	local stock_input=$1 patched_apk=$2 patcher_args=$3 rv_cli_jar=$4 rv_patches_jar=$5
-	local cmd
-	
-	# Detect if using Morphe CLI based on jar filename
-	if [[ "$rv_cli_jar" == *"morphe-cli"* ]]; then
-		# Morphe CLI syntax: java -jar cli.jar patch -p patches.mpp -o output.apk input.apk [options]
-		cmd="env -u GITHUB_REPOSITORY java -jar $rv_cli_jar patch -p $rv_patches_jar --purge -o $patched_apk --keystore=ks.keystore \
---keystore-entry-password=123456789 --keystore-password=123456789 --signer=jhc --keystore-entry-alias=jhc $patcher_args $stock_input"
-	else
-		# ReVanced CLI syntax: java -jar cli.jar patch input.apk -p patches.rvp -o output.apk [options]
-		cmd="env -u GITHUB_REPOSITORY java -jar $rv_cli_jar patch $stock_input --purge -o $patched_apk -p $rv_patches_jar --keystore=ks.keystore \
+	local stock_input=$1 patched_apk=$2 patcher_args=$3 cli_jar=$4 patches_jar=$5
+	local cmd="java -jar '$cli_jar' patch '$stock_input' --purge -o '$patched_apk' -p '$patches_jar' --keystore=ks.keystore \
 --keystore-entry-password=123456789 --keystore-password=123456789 --signer=jhc --keystore-entry-alias=jhc $patcher_args"
-	fi
-	
-	if [ "$OS" = Android ]; then cmd+=" --custom-aapt2-binary=${AAPT2}"; fi
+
+	# TODO: remove this later
+	local cli_name
+	cli_name=$(basename "$cli_jar")
+	if [ "${cli_name::8}" = revanced ]; then cmd+=" -b"; fi
+
+	if [ "$OS" = Android ]; then cmd+=" --custom-aapt2-binary='${AAPT2}'"; fi
 	pr "$cmd"
 	if eval "$cmd"; then [ -f "$patched_apk" ]; else
 		rm "$patched_apk" 2>/dev/null || :
@@ -537,6 +524,7 @@ check_sig() {
 	local sig
 	if grep -q "$pkg_name" sig.txt; then
 		sig=$(java -jar "$APKSIGNER" verify --print-certs "$file" | grep ^Signer | grep SHA-256 | tail -1 | awk '{print $NF}')
+		echo "$pkg_name signature: ${sig}"
 		grep -qFx "$sig $pkg_name" sig.txt
 	fi
 }
@@ -559,9 +547,9 @@ build_rv() {
 	[ "${args[exclusive_patches]}" = true ] && p_patcher_args+=("--exclusive")
 
 	local tried_dl=()
-	for dl_p in archive apkmirror uptodown; do
+	for dl_p in "${DL_SRCS[@]}"; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
-		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name) || [ -z "$pkg_name" ]; then
+		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
 			args[${dl_p}_dlurl]=""
 			epr "ERROR: Could not find ${table} in ${dl_p}"
 			continue
@@ -574,14 +562,15 @@ build_rv() {
 		epr "empty pkg name, not building ${table}."
 		return 0
 	fi
+	pr "Package name of '${table}' is '$pkg_name'"
 	local list_patches
-	list_patches=$(patches_list "$rv_cli_jar" "$rv_patches_jar" "$pkg_name") || return 1
-
+	list_patches=$(patches_list "$cli_jar" "$patches_jar" "$pkg_name") || return 1
 	local get_latest_ver=false
 	if [ "$version_mode" = auto ]; then
 		if ! version=$(get_patch_last_supported_ver "$list_patches" "$pkg_name" \
 			"${args[included_patches]}" "${args[excluded_patches]}" "${args[exclusive_patches]}"); then
-			exit 1
+			epr "get_patch_last_supported_ver failed '$list_patches'"
+			return
 		elif [ -z "$version" ]; then get_latest_ver=true; fi
 	elif isoneof "$version_mode" latest beta; then
 		get_latest_ver=true
@@ -613,27 +602,36 @@ build_rv() {
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
 	if [ ! -f "$stock_apk" ]; then
-		for dl_p in archive apkmirror uptodown; do
+		for dl_p in "${DL_SRCS[@]}"; do
 			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
-			pr "Downloading '${table}' from ${dl_p}"
-			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || true; fi
+			pr "Downloading '${table}' from '${dl_p}'"
+			if ! isoneof $dl_p "${tried_dl[@]}"; then
+				if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; then
+					epr "ERROR: Could not get '${table}' from '${dl_p}'"
+					continue
+				fi
+			fi
 			if ! dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
-				epr "ERROR: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
+				epr "ERROR: Could not download '${table}' from '${dl_p}' with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
 				continue
 			fi
 			break
 		done
-		if [ ! -f "$stock_apk" ]; then return 0; fi
+		if [ ! -f "$stock_apk" ]; then
+			epr "Stock apk not found ($stock_apk)"
+			return 0
+		fi
 	fi
-	if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
-		abort "apk signature mismatch '$stock_apk': $OP"
+	if [ ! -f "${stock_apk}.apkm" ] && ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
+		epr "Not building $table, apk signature mismatch '$stock_apk': $OP"
+		return 0
 	fi
 	log "${table}: ${version}"
 
 	local microg_patch
 	microg_patch=$(grep "^Name: " <<<"$list_patches" | grep -i "gmscore\|microg" || :) microg_patch=${microg_patch#*: }
 	if [ -n "$microg_patch" ] && [[ ${p_patcher_args[*]} =~ $microg_patch ]]; then
-		epr "You cant include/exclude microg patch as that's done by rvmm builder automatically."
+		wpr "You cant include/exclude microg patch as that's done by rvmm builder automatically."
 		p_patcher_args=("${p_patcher_args[@]//-[ei] ${microg_patch}/}")
 	fi
 
@@ -656,24 +654,31 @@ build_rv() {
 				patcher_args+=("-d \"${microg_patch}\"")
 			fi
 		fi
-		if [ "${args[riplib]}" = true ]; then
-			patcher_args+=("--rip-lib x86_64 --rip-lib x86")
-			if [ "$build_mode" = module ]; then
-				patcher_args+=("--rip-lib arm64-v8a --rip-lib armeabi-v7a --unsigned")
+
+		local stock_apk_to_patch="${stock_apk}.stripped.apk"
+		cp -f "$stock_apk" "$stock_apk_to_patch"
+		if [ "$build_mode" = module ]; then
+			zip -d "$stock_apk_to_patch" "lib/*" >/dev/null 2>&1 || :
+		else
+			if [ "$arch" = "arm64-v8a" ]; then
+				zip -d "$stock_apk_to_patch" "lib/armeabi-v7a/*" "lib/x86_64/*" "lib/x86/*" >/dev/null 2>&1 || :
+			elif [ "$arch" = "arm-v7a" ]; then
+				zip -d "$stock_apk_to_patch" "lib/arm64-v8a/*" "lib/x86_64/*" "lib/x86/*" >/dev/null 2>&1 || :
+			elif [ "$arch" = "x86" ]; then
+				zip -d "$stock_apk_to_patch" "lib/arm64-v8a/*" "lib/x86_64/*" "lib/armeabi-v7a/*" >/dev/null 2>&1 || :
+			elif [ "$arch" = "x86_64" ]; then
+				zip -d "$stock_apk_to_patch" "lib/arm64-v8a/*" "lib/armeabi-v7a/*" "lib/x86/*" >/dev/null 2>&1 || :
 			else
-				if [ "$arch" = "arm64-v8a" ]; then
-					patcher_args+=("--rip-lib armeabi-v7a")
-				elif [ "$arch" = "arm-v7a" ]; then
-					patcher_args+=("--rip-lib arm64-v8a")
-				fi
+				zip -d "$stock_apk_to_patch" "lib/x86_64/*" "lib/x86/*" >/dev/null 2>&1 || :
 			fi
 		fi
 		if [ "${NORB:-}" != true ] || [ ! -f "$patched_apk" ]; then
-			if ! patch_apk "$stock_apk" "$patched_apk" "${patcher_args[*]}" "${args[cli]}" "${args[ptjar]}"; then
+			if ! patch_apk "$stock_apk_to_patch" "$patched_apk" "${patcher_args[*]}" "${args[cli]}" "${args[ptjar]}"; then
 				epr "Building '${table}' failed!"
 				return 0
 			fi
 		fi
+		rm "$stock_apk_to_patch"
 		if [ "$build_mode" = apk ]; then
 			local apk_output="${BUILD_DIR}/${app_name_l}-${rv_brand_f}-v${version_f}-${arch_f}.apk"
 			mv -f "$patched_apk" "$apk_output"
@@ -687,18 +692,16 @@ build_rv() {
 
 		module_config "$base_template" "$pkg_name" "$version" "$arch"
 
-		local rv_patches_ver="${rv_patches_jar##*-}"
-		rv_patches_ver="${rv_patches_ver%%.rvp}"
-		rv_patches_ver="${rv_patches_ver%%.mpp}"
+		local patches_ver="${patches_jar##*-}"
 		module_prop \
 			"${args[module_prop_name]}" \
 			"${app_name} ${args[rv_brand]}" \
-			"${version} (patches: ${rv_patches_ver})" \
-			"${app_name} ${args[rv_brand]} Magisk module" \
+			"${version} (patches ${patches_ver})" \
+			"${app_name} ${args[rv_brand]} module" \
 			"https://raw.githubusercontent.com/${GITHUB_REPOSITORY-}/update/${upj}" \
 			"$base_template"
 
-		local module_output="${app_name_l}-${rv_brand_f}-magisk-v${version_f}-${arch_f}.zip"
+		local module_output="${app_name_l}-${rv_brand_f}-module-v${version_f}-${arch_f}.zip"
 		pr "Packing module ${table}"
 		cp -f "$patched_apk" "${base_template}/base.apk"
 		if [ "${args[include_stock]}" = true ]; then cp -f "$stock_apk" "${base_template}/${pkg_name}.apk"; fi
@@ -731,5 +734,5 @@ versionCode=${NEXT_VER_CODE}
 author=j-hc
 description=${4}" >"${6}/module.prop"
 
-	if [ "$ENABLE_MAGISK_UPDATE" = true ]; then echo "updateJson=${5}" >>"${6}/module.prop"; fi
+	if [ "$ENABLE_MODULE_UPDATE" = true ]; then echo "updateJson=${5}" >>"${6}/module.prop"; fi
 }
