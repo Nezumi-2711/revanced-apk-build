@@ -8,6 +8,7 @@ parallel-jobs = 1
 
 [YouTube]
 build-mode = "both"
+excluded-patches = "'Custom branding'"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
@@ -18,6 +19,7 @@ patches-source = "MorpheApp/morphe-patches"
 cli-source = "MorpheApp/morphe-cli"
 rv-brand = "Morphe"
 build-mode = "both"
+excluded-patches = "'Custom branding'"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
@@ -25,6 +27,7 @@ archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.y
 [Music]
 build-mode = "both"
 arch = "both"
+excluded-patches = "'Custom branding'"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.youtube.music"
@@ -36,6 +39,7 @@ cli-source = "MorpheApp/morphe-cli"
 rv-brand = "Morphe"
 build-mode = "both"
 arch = "both"
+excluded-patches = "'Custom branding'"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.youtube.music"
@@ -43,15 +47,17 @@ archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.a
 [Reddit-Morphe]
 app-name = "Reddit"
 rv-brand = "Morphe"
-build-mode = "both"
+build-mode = "apk"
 patches-source = "MorpheApp/morphe-patches"
 cli-source = "MorpheApp/morphe-cli"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/redditinc/reddit/"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.reddit.frontpage"
 uptodown-dlurl = "https://reddit-official-app.en.uptodown.com/android"
+excluded-patches = "'Custom branding name for Reddit'"
 dpi = "120-640dpi"
 
 [Twitter]
+enabled = false
 patches-source = "crimera/piko"
 cli-source = "MorpheApp/morphe-cli"
 rv-brand = "Piko"
@@ -62,23 +68,11 @@ version = "11.81.0-release.0"
 include-stock = "split"
 
 [GooglePhotos]
-patches-source = "RookieEnough/De-Vanced"
-cli-source = "MorpheApp/morphe-cli"
-rv-brand = "De-Vanced"
 build-mode = "both"
 arch = "both"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos/"
 uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.photos"
-
-[Instagram]
-patches-source = "RookieEnough/De-Vanced"
-cli-source = "MorpheApp/morphe-cli"
-rv-brand = "De-Vanced"
-build-mode = "both"
-arch = "both"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/instagram/instagram-instagram/"
-uptodown-dlurl = "https://instagram.en.uptodown.com/android"
 
 [Twitch]
 enabled = false
